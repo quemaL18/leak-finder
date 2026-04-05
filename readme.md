@@ -12,7 +12,17 @@ cargo build --release
 
 cargo run -- ./testdata --recursive --extensions txt,json --output report.json --verbose
 
-Доступные параметры на 05.04: --recursive (-r) для рекурсивного обхода, --extensions для фильтра по расширениям (например txt,json), --output (-o) для сохранения результата, --verbose (-v) для подробного вывода, --max-size для ограничения размера файла.
+Доступные параметры на 05.04: 
+
+--recursive (-r) для рекурсивного обхода, 
+
+--extensions для фильтра по расширениям (например txt,json), 
+
+--output (-o) для сохранения результата, 
+
+--verbose (-v) для подробного вывода, 
+
+--max-size для ограничения размера файла.
 
 Пример: cargo run -- ./testdata --recursive --output result.json --verbose
 
