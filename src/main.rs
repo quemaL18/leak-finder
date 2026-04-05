@@ -1,6 +1,8 @@
 use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
+use serde::Serialize;
+use chrono::Local;
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -15,12 +17,28 @@ struct Args {
 
     #[arg(long, default_value_t = 1000000)]
     max_size: u64,
+
+    #[arg(long, short)]
+    output: Option<PathBuf>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct ScanResult {
     path: String,
     issues: Vec<String>,
+}
+#[derive(Serialize)]
+struct ScanReport {
+    timestamp: String,
+    scan_path: String,
+    recursive: bool,
+    max_size: u64,
+    total_files: i32,
+    checked_files: i32,
+    skipped_large_files: i32,
+    warnings_count: i32,
+    results: Vec<ScanResult>,
+
 }
 
 fn main() {
@@ -146,21 +164,39 @@ fn main() {
         }
     }
 
-    println!("\nНайденные проблемы:");
-    if results.is_empty() {
-        println!("Совпадений не найдено.");
+    let report = ScanReport {
+        timestamp: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        scan_path: args.path.display().to_string(),
+        recursive: args.recursive,
+        max_size: args.max_size,
+        total_files,
+        checked_files,
+        skipped_large_files,
+        warnings_count,
+        results,
+    };
+
+    if let Some(output_path) = &args.output {
+        let json = serde_json::to_string_pretty(&report).unwrap();
+        fs::write(output_path, json).unwrap();
+        println!("Результаты сохранены в файл: {}", output_path.display());
     } else {
-        for result in &results {
-            println!("Файл: {}", result.path);
-            for issue in &result.issues {
-                println!("  - {}", issue);
+        println!("Найденные проблемы:");
+        if report.results.is_empty() {
+            println!("Совпадений не найдено.");
+        } else {
+            for result in &report.results {
+                println!("Файл: {}", result.path);
+                for issue in &result.issues {
+                    println!("  - {}", issue);
+                }
             }
         }
-    }
-
+    
     println!("\nСканирование завершено.");
     println!("Всего файлов найдено: {}", total_files);
     println!("Файлов проверено: {}", checked_files);
     println!("Пропущено больших файлов: {}", skipped_large_files);
     println!("Всего предупреждений: {}", warnings_count);
+    }
 }
