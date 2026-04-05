@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-04-05 21:59:44",
+  "scan_path": "./testdata",
+  "recursive": false,
+  "max_size": 1000000,
+  "total_files": 2,
+  "checked_files": 2,
+  "skipped_large_files": 0,
+  "warnings_count": 3,
+  "results": [
+    {
+      "path": "./testdata\\a.txt",
+      "issues": [
+        "credit_card",
+        "generic_token"
+      ]
+    },
+    {
+      "path": "./testdata\\b.json",
+      "issues": [
+        "email"
+      ]
+    }
+  ],
+  "verbose": true
+}

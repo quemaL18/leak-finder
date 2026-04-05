@@ -1,50 +1,7 @@
-username = papa 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-паспорт = 0420
+почта: user@example.com
+токен: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.dog
+UUID: 550e8400-e29b-41d4-a716-446655440000
+карта: 4111-1111-1111-1111
+пароль: mysecretpassword
+Token: abc123token
+апи ключ: 12345678-1234-1234-1234-123456789012
