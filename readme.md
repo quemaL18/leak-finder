@@ -2,7 +2,9 @@
 
 как установить себе: 
 git clone https://github.com/quemaL18/leak-finder
+
 cd leak-finder
+
 cargo build --release
 
 Использование
