@@ -1,6 +1,7 @@
 Инструмент для поиска чувствительных данных в файлах. Ищет email, JWT токены, UUID, номера карт, ключевые слова (password, token, secret, api_key и их русские аналоги). Сохраняет результаты в JSON.
 
-как установить себе: 
+как установить себе чз гит:
+
 git clone https://github.com/quemaL18/leak-finder
 
 cd leak-finder
