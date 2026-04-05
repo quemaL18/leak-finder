@@ -201,7 +201,7 @@ fn main() {
     }
 
     let report = ScanReport {
-        timestamp: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        timestamp: Local::now().format("%Y-%d-%m %H:%M:%S").to_string(),
         scan_path: args.path.display().to_string(),
         recursive: args.recursive,
         max_size: args.max_size,
