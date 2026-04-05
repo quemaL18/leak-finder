@@ -4,3 +4,4 @@ report.json
 *.swp
 .idea/
 .vscode/report.json
+*.log
