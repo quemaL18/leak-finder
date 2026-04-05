@@ -12,6 +12,9 @@ struct Args {
 
     #[arg(long)]
     extensions: Option<String>,
+
+    #[arg(long, default_value_t = 1000000)]
+    max_size: u64,
 }
 
 #[derive(Debug)]
@@ -29,8 +32,6 @@ fn main() {
             .filter(|e| !e.is_empty())
             .collect()
     });
-
-    let max_size: u64 = 1_000_000; // 1 мб
 
     let mut total_files: i32 = 0;
     let mut checked_files: i32 = 0;
@@ -65,7 +66,7 @@ fn main() {
 
                     match fs::metadata(path) {
                         Ok(metadata) => {
-                            if metadata.len() > max_size {
+                            if metadata.len() > args.max_size {
                                 skipped_large_files += 1;
                                 println!(
                                     "[INFO] skipped large file: {} ({} bytes)",
