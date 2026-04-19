@@ -1,7 +1,5 @@
 import os
 
-SECRET_KEY = "django-insecure-abcdefghijklmnopqrstuvwxyz0123456789"
-
 def connect_db():
     username = "admin"
     password = "AdminPass2024!"
