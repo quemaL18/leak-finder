@@ -12,7 +12,9 @@ cargo build --release
 
 cargo run -- ./testdata --recursive --extensions txt,json --output report.json --verbose
 
-Доступные параметры на 05.04: 
+Доступные параметры на 19.04: 
+
+--level low/medium/high ( определяет количество и типы искомых паттернов: LOW ищет только самые критичные данные (email, credit card, JWT), MEDIUM добавляет основные паттерны и используется по умолчанию, а HIGH включает все возможные паттерны используемые в коде).
 
 --recursive (-r) для рекурсивного обхода, 
 
