@@ -1,0 +1,14 @@
+# Application Configuration
+DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+API_KEY=abc123def456ghi789jkl
+SECRET_KEY=mysecretkey12345
+
+# Email settings
+ADMIN_EMAIL=admin@example.com
+SUPPORT_EMAIL=support@company.com
+
+# JWT Token example
+AUTH_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+
+# Credit card (test)
+CARD_NUMBER=4111-1111-1111-1111
