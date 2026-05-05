@@ -5,3 +5,7 @@ report.json
 .idea/
 .vscode/report.json
 *.log
+.testdata/.scanner_cache.json
+.scanner_cache.json
+report.html
+*.html

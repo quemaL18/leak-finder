@@ -1,9 +1,0 @@
-{
-  "files": {
-    "logs/debug.log": "ae1589af0edbef73e7de13baea67446f60100ecb26712191a1da1ed6217e0f48",
-    "source/main.rs": "cad9a7d07a24d343c76c5f453b245df089ef4561616a52bbe296eefc65f262a4",
-    "README.MD": "f202b949bd33e3d2b8a02aa76164c91937b80bfa43f77862650347993f94840b",
-    "secrets/keys.txt": "a22e4345aacc74f08302b74219be949bc743a29fad1cdc7a679abcc3b58d612a",
-    "config/app_config": "7750df6246e4c76840df749903d8e120ed742fc05347a65f64287f3615ec6ed6"
-  }
-}
