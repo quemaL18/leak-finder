@@ -361,7 +361,7 @@ fn scan_file(
 
             for (name, regex) in patterns.iter() {
                 for (line_num, line) in content.lines().enumerate() {
-                    if let Some(found_match) = regex.find(line) {
+                    for found_match in regex.find_iter(line) {
                         issues.push(name.clone());
 
                         contexts.push(MatchContext {
@@ -380,8 +380,6 @@ fn scan_file(
                                 name
                             );
                         }
-
-                        break;
                     }
                 }
             }
