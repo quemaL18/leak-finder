@@ -1,3 +1,20 @@
+//! # Сканер конфиденциальных данных
+//!
+//! Это утилита командной строки для поиска конфиденциальной информации
+//! (email, паролей, токенов, кредитных карт и т.д.) в файловой системе.
+//!
+//! ## Особенности
+//! * Кэширование SHA-256 для ускорения повторных сканирований
+//! * Параллельная обработка файлов с помощью Rayon
+//! * Поддержка `.gitignore` и пользовательских `.scanignore` файлов
+//! * Экспорт в JSON и HTML форматы
+//! * Настраиваемые уровни чувствительности (medium/low/high)
+//!
+//! ## Пример использования
+//! ```bash
+//! scanner ./src --recursive --level high --html-report report.html
+//! ```
+
 use chrono::Local;
 use clap::Parser;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
@@ -12,90 +29,146 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use walkdir::WalkDir;
 
+/// Аргументы командной строки для настройки сканирования
 #[derive(Parser, Debug)]
 struct Args {
+    /// Путь для сканирования (файл или директория)
     path: PathBuf,
 
+    /// Рекурсивный обход поддиректорий
     #[arg(short, long, default_value_t = false)]
     recursive: bool,
 
+    /// Фильтр по расширениям файлов через запятую (например: "rs,txt,md")
     #[arg(long)]
     extensions: Option<String>,
 
+    /// Максимальный размер файла в байтах (по умолчанию 1 MB)
     #[arg(long, default_value_t = 1_000_000)]
     max_size: u64,
 
+    /// Путь для сохранения JSON отчёта
     #[arg(long, short)]
     output: Option<PathBuf>,
 
+    /// Подробный вывод в консоль
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
+    /// Уровень сканирования: "low", "medium" (по умолчанию) или "high"
     #[arg(long, default_value = "medium")]
     level: String,
 
+    /// Принудительное сканирование всех файлов, игнорируя кэш
     #[arg(long, default_value_t = false)]
     force: bool,
 
+    /// Очистка кэша SHA-256 перед сканированием
     #[arg(long, default_value_t = false)]
     clear_cache: bool,
 
+    /// Пользовательский путь к файлу с ignore-правилами
     #[arg(long)]
     ignore_file: Option<PathBuf>,
 
+    /// Полное отключение всех ignore-правил
     #[arg(long, default_value_t = false)]
     no_ignore: bool,
 
+    /// Путь для сохранения HTML отчёта
     #[arg(long)]
     html_report: Option<PathBuf>,
 }
 
+/// Контекст найденного совпадения для отчёта
 #[derive(Debug, Serialize)]
 struct MatchContext {
+    /// Имя паттерна, который сработал (например, "email")
     pattern_name: String,
+    /// Номер строки в файле (начиная с 1)
     line_number: usize,
+    /// Содержимое строки целиком
     line_content: String,
+    /// Позиция начала совпадения в строке
     match_position: usize,
+    /// Длина совпавшего фрагмента
     match_length: usize,
 }
 
+/// Результат сканирования одного файла
 #[derive(Debug, Serialize)]
 struct ScanResult {
+    /// Путь к файлу (абсолютный или относительный)
     path: String,
+    /// Список названий сработавших паттернов
     issues: Vec<String>,
+    /// Контексты для каждого совпадения
     contexts: Vec<MatchContext>,
 }
 
+/// Полный отчёт о сканировании для экспорта
 #[derive(Serialize)]
 struct ScanReport {
+    /// Время запуска сканирования
     timestamp: String,
+    /// Сканируемый путь
     scan_path: String,
+    /// Флаг рекурсивного обхода
     recursive: bool,
+    /// Максимальный размер файла
     max_size: u64,
+    /// Всего найдено файлов
     total_files: i32,
+    /// Файлов, фактически проверенных
     checked_files: i32,
+    /// Пропущено из-за превышения размера
     skipped_large_files: i32,
+    /// Пропущено из-за неизменённого хэша
     skipped_unchanged_files: i32,
+    /// Файлов, исключённых по ignore-правилам
     ignored_files: i32,
+    /// Общее количество предупреждений (совпадений)
     warnings_count: i32,
+    /// Детальные результаты по каждому файлу
     results: Vec<ScanResult>,
+    /// Флаг verbose для статистики
     verbose: bool,
+    /// Флаг принудительного сканирования
     force: bool,
+    /// Длительность сканирования в миллисекундах
     scan_duration_ms: u128,
 }
 
+/// Кэш для хранения SHA-256 хэшей ранее просканированных файлов
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct ScannerCache {
+    /// Карта: относительный путь файла → его SHA-256 хэш
     files: HashMap<String, String>,
 }
 
+/// Кандидат на сканирование с предварительно вычисленным хэшем
 #[derive(Debug, Clone)]
 struct FileCandidate {
+    /// Полный путь к файлу
     path: PathBuf,
+    /// Относительный путь для кэша
     cache_key: String,
+    /// SHA-256 хэш содержимого
     hash: String,
 }
 
+/// Возвращает список регулярных выражений в зависимости от уровня сканирования.
+///
+/// Уровни:
+/// * `"low"` - только email, JWT и кредитные карты
+/// * `"medium"` (по умолчанию) - добавляет UUID, пароли, токены, ключи API
+/// * `"high"` - дополнительно телефоны и IP-адреса
+///
+/// # Параметры
+/// * `level` - строковый идентификатор уровня ("low", "medium", "high")
+///
+/// # Возвращаемое значение
+/// Вектор кортежей (имя_паттерна, скомпилированный_regex)
 fn get_patterns_by_level(level: &str) -> Vec<(String, Regex)> {
     let email = Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
     let jwt = Regex::new(r"eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*").unwrap();
@@ -163,6 +236,13 @@ fn get_patterns_by_level(level: &str) -> Vec<(String, Regex)> {
     }
 }
 
+/// Определяет корневую директорию сканирования на основе входного пути.
+///
+/// Если указан файл — возвращает его родительскую директорию.
+/// Если указана директория — возвращает её как есть.
+///
+/// # Параметры
+/// * `path` - исходный путь из аргументов командной строки
 fn get_scan_root(path: &Path) -> PathBuf {
     if path.is_file() {
         path.parent()
@@ -173,11 +253,33 @@ fn get_scan_root(path: &Path) -> PathBuf {
     }
 }
 
+/// Преобразует абсолютный путь в относительный для использования в качестве ключа кэша.
+///
+/// Заменяет обратные слеши на прямые для кроссплатформенной совместимости.
+///
+/// # Параметры
+/// * `path` - полный путь к файлу
+/// * `scan_root` - корень сканирования
+///
+/// # Пример
+/// ```
+/// let key = normalize_cache_key(Path::new("/home/user/project/src/main.rs"), Path::new("/home/user/project"));
+/// assert_eq!(key, "src/main.rs");
+/// ```
 fn normalize_cache_key(path: &Path, scan_root: &Path) -> String {
     let relative = path.strip_prefix(scan_root).unwrap_or(path);
     relative.to_string_lossy().replace('\\', "/")
 }
 
+/// Вычисляет SHA-256 хэш содержимого файла.
+///
+/// Файл читается блоками по 64 KB для эффективной работы с большими файлами.
+///
+/// # Параметры
+/// * `path` - путь к файлу
+///
+/// # Возвращаемое значение
+/// HEX-строка хэша или ошибка ввода-вывода
 fn calculate_sha256(path: &Path) -> io::Result<String> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
@@ -196,6 +298,14 @@ fn calculate_sha256(path: &Path) -> io::Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+/// Загружает кэш сканера из JSON-файла.
+///
+/// Если файл не существует или содержит невалидный JSON,
+/// возвращает пустой кэш.
+///
+/// # Параметры
+/// * `cache_path` - путь к файлу кэша
+/// * `verbose` - флаг для вывода диагностики
 fn load_cache(cache_path: &Path, verbose: bool) -> ScannerCache {
     if !cache_path.exists() {
         return ScannerCache::default();
@@ -238,6 +348,14 @@ fn load_cache(cache_path: &Path, verbose: bool) -> ScannerCache {
     }
 }
 
+/// Сохраняет кэш сканера в JSON-файл.
+///
+/// Автоматически создаёт родительские директории при необходимости.
+///
+/// # Параметры
+/// * `cache_path` - путь для сохранения
+/// * `cache` - данные кэша
+/// * `verbose` - флаг для вывода диагностики
 fn save_cache(cache_path: &Path, cache: &ScannerCache, verbose: bool) -> io::Result<()> {
     let json = serde_json::to_string_pretty(cache).unwrap();
 
@@ -256,6 +374,18 @@ fn save_cache(cache_path: &Path, cache: &ScannerCache, verbose: bool) -> io::Res
     Ok(())
 }
 
+/// Создаёт матчер для ignore-правил на основе нескольких источников.
+///
+/// Правила загружаются в следующем порядке:
+/// 1. Встроенные правила (`.git/`, `target/`, `node_modules/`)
+/// 2. Пользовательский файл (если указан через `--ignore-file`)
+/// 3. Файл `.scanignore` в корне сканирования
+///
+/// # Параметры
+/// * `scan_root` - корень, относительно которого вычисляются пути
+/// * `ignore_file` - опциональный пользовательский файл с правилами
+/// * `no_ignore` - если true, полностью отключает все правила
+/// * `verbose` - флаг для вывода диагностики
 fn build_ignore_matcher(
     scan_root: &Path,
     ignore_file: &Option<PathBuf>,
@@ -312,6 +442,13 @@ fn build_ignore_matcher(
     }
 }
 
+/// Проверяет, должен ли файл или директория быть проигнорированы.
+///
+/// # Параметры
+/// * `path` - проверяемый путь
+/// * `scan_root` - корень сканирования
+/// * `is_dir` - является ли путь директорией
+/// * `matcher` - опциональный матчер правил
 fn is_ignored(
     path: &Path,
     scan_root: &Path,
@@ -329,6 +466,14 @@ fn is_ignored(
         .is_ignore()
 }
 
+/// Проверяет, является ли файл внутренним сгенерированным артефактом сканера.
+///
+/// К таким файлам относятся сам кэш, JSON-отчёт и HTML-отчёт.
+///
+/// # Параметры
+/// * `path` - проверяемый путь
+/// * `cache_path` - путь к файлу кэша
+/// * `args` - аргументы командной строки
 fn is_internal_generated_file(path: &Path, cache_path: &Path, args: &Args) -> bool {
     if path == cache_path {
         return true;
@@ -349,6 +494,15 @@ fn is_internal_generated_file(path: &Path, cache_path: &Path, args: &Args) -> bo
     false
 }
 
+/// Сканирует один файл на наличие конфиденциальных данных.
+///
+/// # Параметры
+/// * `path` - путь к файлу
+/// * `patterns` - список паттернов для поиска
+/// * `verbose` - флаг для вывода диагностики
+///
+/// # Возвращаемое значение
+/// `Some(ScanResult)` если найдены совпадения, иначе `None`
 fn scan_file(
     path: &PathBuf,
     patterns: &Arc<Vec<(String, Regex)>>,
@@ -405,6 +559,12 @@ fn scan_file(
     }
 }
 
+/// Экранирует HTML-спецсимволы для безопасной вставки в HTML-отчёт.
+///
+/// Заменяет: & < > " '
+///
+/// # Параметры
+/// * `input` - входная строка
 fn html_escape(input: &str) -> String {
     input
         .replace('&', "&amp;")
@@ -414,6 +574,15 @@ fn html_escape(input: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+/// Подсвечивает найденный фрагмент в строке с помощью HTML-тега `<mark>`.
+///
+/// # Параметры
+/// * `line` - исходная строка
+/// * `start` - позиция начала фрагмента
+/// * `length` - длина фрагмента
+///
+/// # Возвращаемое значение
+/// HTML-строка с подсвеченным фрагментом
 fn highlight_fragment(line: &str, start: usize, length: usize) -> String {
     let end = start.saturating_add(length);
 
@@ -429,6 +598,17 @@ fn highlight_fragment(line: &str, start: usize, length: usize) -> String {
     }
 }
 
+/// Генерирует HTML-отчёт на основе данных сканирования.
+///
+/// Использует встроенный шаблон `report_template.html` и заменяет в нём
+/// переменные на актуальные данные.
+///
+/// # Параметры
+/// * `report` - структура с результатами сканирования
+/// * `output_path` - путь для сохранения HTML-файла
+///
+/// # Паника
+/// Может паниковать, если шаблон не содержит необходимых плейсхолдеров
 fn generate_html_report(report: &ScanReport, output_path: &Path) -> io::Result<()> {
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -516,6 +696,17 @@ fn generate_html_report(report: &ScanReport, output_path: &Path) -> io::Result<(
     fs::write(output_path, html)
 }
 
+/// Точка входа в программу.
+///
+/// Выполняет полный цикл сканирования:
+/// 1. Парсинг аргументов командной строки
+/// 2. Очистка кэша (при --clear-cache)
+/// 3. Загрузка ignore-правил
+/// 4. Обход файловой системы и фильтрация файлов
+/// 5. Параллельное сканирование содержимого
+/// 6. Обновление и сохранение кэша
+/// 7. Генерация отчётов (JSON и/или HTML)
+/// 8. Вывод статистики в консоль
 fn main() {
     let args = Args::parse();
     let start_time = std::time::Instant::now();
